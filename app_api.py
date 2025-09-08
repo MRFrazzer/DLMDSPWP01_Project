@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 
 # Import your exported notebook module
-import Updated_Assignment_flow9 as app
+import DLMDSPWP01_Project.py as app
 
 # ---- Loaders as simple functions (call your existing classes) ----
 def load_training_data(path: str | Path) -> pd.DataFrame:
