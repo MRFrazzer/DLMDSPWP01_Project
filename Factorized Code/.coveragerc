@@ -1,0 +1,19 @@
+# .coveragerc
+# Coverage.py configuration for this project.
+# I’m keeping this minimal and focused on measuring my code, not third-party libs or tests.
+
+[run]
+# Files/directories to omit entirely from measurement.
+omit =
+    tests/*                 # don’t measure test code
+    */site-packages/*       # ignore installed third-party packages
+    */anaconda3/*           # ignore Anaconda/conda-managed libs
+    */Lib/*                 # ignore stdlib or global env libs on Windows/Python installs
+
+[report]
+# Line patterns (regular expressions) that should be excluded from coverage reporting.
+exclude_lines =
+    pragma: no cover        # explicit opt-out marker in code
+    if __name__ == .__main__.:   # skip the script entry-guard block
+                                 # (the dots are regex wildcards so it matches both ' and " quotes)
+    if TYPE_CHECKING:        # ignore typing-only branches used for static analysis
