@@ -54,30 +54,45 @@ def assign_single_test_point(                                                   
         f"No valid assignment for x={x_value}, y={y_value}; deviations={deviations}, tolerances={tolerances}"  # message
     )                                                                              # end raise
 
-
 def stream_and_store_test_results(                                                # process all test rows
     test_df: pd.DataFrame,                                                         # test DataFrame
     ideal_lookup_df: pd.DataFrame,                                                 # compact ideal lookup
     chosen_ideals: List[str],                                                      # chosen ideal names
     tolerances: Dict[str, float],                                                  # tolerance dict
     engine: Engine,                                                                # database engine
-    x_col: str = "X",                                                             # X column name
+    x_col: str = "X",                                                              # X column name
 ) -> None:                                                                         # writes to DB, returns None
     """Assign every test row and append the results to the `test_mapping` table.
 
-    Each row I write includes: X, Y, DeltaY, and IdealFuncNo (1..4).
-    """  # function docstring
+    Each written row includes: X, Y, DeltaY, and IdealFuncNo (1..4).
+    """
     output_rows: List[Dict[str, float | int]] = []                                 # buffer for DB append
+    rejected = 0                                                                   # count unassigned rows
+
     for _, test_row in test_df.iterrows():                                         # iterate test rows
-        ideal_number, deviation = assign_single_test_point(                        # assign this row
-            x_value=float(test_row[x_col]),                                        # pass numeric X
-            y_value=float(test_row["Y"]),                                         # pass numeric Y
-            ideal_lookup_df=ideal_lookup_df,                                       # lookup table
-            chosen_ideals=chosen_ideals,                                           # chosen ideals order
-            tolerances=tolerances,                                                 # tolerance dict
-            x_col=x_col,                                                           # X column name
-        )                                                                          # end assign
-        output_rows.append(                                                        # collect row for DB
-            {"X": float(test_row[x_col]), "Y": float(test_row["Y"]), "DeltaY": float(deviation), "IdealFuncNo": int(ideal_number)}  # row dict
-        )                                                                          # end append
-    pd.DataFrame(output_rows).to_sql("test_mapping", engine, if_exists="append", index=False)  # append to table
+        try:
+            ideal_number, deviation = assign_single_test_point(                    # assign this row
+                x_value=float(test_row[x_col]),                                    # pass numeric X
+                y_value=float(test_row["Y"]),                                      # pass numeric Y
+                ideal_lookup_df=ideal_lookup_df,                                   # lookup table
+                chosen_ideals=chosen_ideals,                                       # chosen ideals order
+                tolerances=tolerances,                                             # tolerance dict
+                x_col=x_col,                                                       # X column name
+            )
+            output_rows.append({                                                   # collect row for DB
+                "X": float(test_row[x_col]),
+                "Y": float(test_row["Y"]),
+                "DeltaY": float(deviation),
+                "IdealFuncNo": int(ideal_number),
+            })
+        except AssignmentRuleError as e:                                           # no ideal within tolerance
+            print(f"[WARN] {e}")                                                   # downgrade error → warning
+            rejected += 1
+            continue                                                               # keep processing next row
+
+    if output_rows:                                                                # write only if we have rows
+        pd.DataFrame(output_rows).to_sql(
+            "test_mapping", engine, if_exists="append", index=False
+        )
+    print(f"[INFO] wrote {len(output_rows)} rows; skipped {rejected} unassigned")
+
