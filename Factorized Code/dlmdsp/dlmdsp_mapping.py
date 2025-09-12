@@ -64,35 +64,48 @@ def stream_and_store_test_results(                                              
 ) -> None:                                                                         # writes to DB, returns None
     """Assign every test row and append the results to the `test_mapping` table.
 
-    Each written row includes: X, Y, DeltaY, and IdealFuncNo (1..4).
+    Accepted rows → DB table `test_mapping`.
+    Rejected rows → CSV file `test_rejections.csv` with a human-readable reason.
     """
-    output_rows: List[Dict[str, float | int]] = []                                 # buffer for DB append
-    rejected = 0                                                                   # count unassigned rows
+    output_rows: List[Dict[str, float | int]] = []                                 # buffer for accepted rows
+    rejected_rows: List[Dict[str, float | str]] = []                               # buffer for rejected rows
 
     for _, test_row in test_df.iterrows():                                         # iterate test rows
+        x_val = float(test_row[x_col])                                             # numeric X
+        y_val = float(test_row["Y"])                                               # numeric Y
         try:
-            ideal_number, deviation = assign_single_test_point(                    # assign this row
-                x_value=float(test_row[x_col]),                                    # pass numeric X
-                y_value=float(test_row["Y"]),                                      # pass numeric Y
-                ideal_lookup_df=ideal_lookup_df,                                   # lookup table
-                chosen_ideals=chosen_ideals,                                       # chosen ideals order
-                tolerances=tolerances,                                             # tolerance dict
-                x_col=x_col,                                                       # X column name
+            ideal_number, deviation = assign_single_test_point(                    # attempt assignment
+                x_value=x_val,
+                y_value=y_val,
+                ideal_lookup_df=ideal_lookup_df,
+                chosen_ideals=chosen_ideals,
+                tolerances=tolerances,
+                x_col=x_col,
             )
-            output_rows.append({                                                   # collect row for DB
-                "X": float(test_row[x_col]),
-                "Y": float(test_row["Y"]),
+            output_rows.append({                                                   # accepted → collect for DB
+                "X": x_val,
+                "Y": y_val,
                 "DeltaY": float(deviation),
                 "IdealFuncNo": int(ideal_number),
             })
-        except AssignmentRuleError as e:                                           # no ideal within tolerance
-            print(f"[WARN] {e}")                                                   # downgrade error → warning
-            rejected += 1
-            continue                                                               # keep processing next row
+        except AssignmentRuleError as e:                                           # unassigned → log + keep going
+            print(f"[WARN] {e}")
+            rejected_rows.append({
+                "X": x_val,
+                "Y": y_val,
+                "reason": str(e),                                                  # keep full message for traceability
+            })
+            continue
 
-    if output_rows:                                                                # write only if we have rows
+    # Write accepted rows to DB (same as before)
+    if output_rows:
         pd.DataFrame(output_rows).to_sql(
             "test_mapping", engine, if_exists="append", index=False
         )
-    print(f"[INFO] wrote {len(output_rows)} rows; skipped {rejected} unassigned")
+        print(f"[INFO] wrote {len(output_rows)} accepted rows to table 'test_mapping'")
 
+    # Write rejected rows to a CSV for inspection
+    if rejected_rows:
+        rej_path = "test_rejections.csv"                                           # saved in project working dir
+        pd.DataFrame(rejected_rows).to_csv(rej_path, index=False)
+        print(f"[INFO] saved {len(rejected_rows)} rejected rows to {rej_path}")
