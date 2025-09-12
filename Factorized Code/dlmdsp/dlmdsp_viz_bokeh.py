@@ -56,8 +56,11 @@ def _make_single_bokeh_panel(                                                   
 
     if test_mapping_df is not None and not test_mapping_df.empty:                  # only if mapping exists
         total_count = len(test_mapping_df)                                         # set total count
-        accepted = test_mapping_df.loc[test_mapping_df["IdealFuncNo"] == ideal_number_for_panel, ["X", "Y", "DeltaY", "IdealFuncNo"]].copy()  # filter accepted
-        accepted_count = len(accepted)                                             # count accepted
+        # Coerce IdealFuncNo to numeric so the equality check works even if DB gave us strings
+        mask = pd.to_numeric(test_mapping_df["IdealFuncNo"], errors="coerce") == ideal_number_for_panel
+        accepted = test_mapping_df.loc[mask, ["X", "Y", "DeltaY", "IdealFuncNo"]].copy()  # accepted rows for this ideal
+        accepted_count = int(mask.sum())  # how many accepted for this ideal
+
         if accepted_count > 0:                                                     # if any accepted
             accepted.rename(columns={"X": "x"}, inplace=True)                    # rename X→x for plotting
             from bokeh.models import ColumnDataSource as CDS                        # alias to avoid shadowing
@@ -67,8 +70,32 @@ def _make_single_bokeh_panel(                                                   
 
         ideal_curve = ideal_df[[x_col, ideal_col]].rename(columns={x_col: "x", ideal_col: "ideal_y"})  # ideal series
         all_points = test_mapping_df[["X", "Y", "DeltaY", "IdealFuncNo"]].rename(columns={"X": "x"}).copy()  # all test points
-        joined = pd.merge(all_points, ideal_curve, on="x", how="left")           # attach ideal y at each x
-        joined["delta_here"] = (joined["Y"] - joined["ideal_y"]).abs()          # deviation vs this ideal
+
+        # FIX: ensure both merge keys have the same dtype (float) to avoid "object vs float64" merge error
+        all_points["x"]  = pd.to_numeric(all_points["x"], errors="coerce")
+        ideal_curve["x"] = pd.to_numeric(ideal_curve["x"], errors="coerce")
+
+        joined = pd.merge(all_points, ideal_curve, on="x", how="left")  # attach ideal y at each x
+        
+        # Ensure numeric dtypes so arithmetic below works (CSV/DB round-trips can turn numbers into strings)
+        for c in ("Y", "ideal_y", "DeltaY"):
+            if c in joined:
+                joined[c] = pd.to_numeric(joined[c], errors="coerce")  # cast column to numeric; non-numeric -> NaN
+
+        # Compute absolute residual at each test x used by the plot:
+        # - Prefer the residual already produced by the assignment step (DeltaY)
+        # - If that column isn't present, compute residual on the fly as Y - ideal_y
+        joined["abs_diff"] = (
+            joined["DeltaY"] if "DeltaY" in joined else (joined["Y"] - joined["ideal_y"])
+        ).abs()
+
+
+        # FIX: make sure arithmetic columns are numeric
+        joined["Y"]       = pd.to_numeric(joined["Y"], errors="coerce")
+        joined["ideal_y"] = pd.to_numeric(joined["ideal_y"], errors="coerce")
+
+        joined["delta_here"] = (joined["Y"] - joined["ideal_y"]).abs()  # deviation vs this ideal
+
         rejected = joined.loc[joined["delta_here"] > tolerance, ["x", "Y", "delta_here", "IdealFuncNo"]].copy()  # out-of-band
 
         if not rejected.empty:                                                     # draw rejected markers
