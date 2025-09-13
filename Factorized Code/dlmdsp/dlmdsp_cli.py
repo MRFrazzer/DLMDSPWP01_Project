@@ -26,7 +26,7 @@ from .dlmdsp_plots import quick_plot_training_vs_ideals                         
 from .dlmdsp_viz_bokeh import save_bokeh_training_vs_ideals                        # optional: bokeh
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Excel export helper (DB → 3 sheets) + optional 4th sheet from CSV (rejections)
+# Excel export helper creates 3 sheets from the tables in the database as well as a sheet to record the rejected rows from the test dataset.
 # ──────────────────────────────────────────────────────────────────────────────
 def export_db_to_excel(db_path, out_path=None, rejections_csv="test_rejections.csv"):
     """
@@ -95,7 +95,7 @@ def export_db_to_excel(db_path, out_path=None, rejections_csv="test_rejections.c
             df = pd.read_sql(f"SELECT * FROM {table};", con)    # read full table
             df.to_excel(xw, sheet_name=table, index=False)      # write sheet
 
-        # 2) Append a 4th sheet from the CSV of rejections (only if file exists)
+        # 2) Append a 4th sheet from the CSV of rejections (only if file exists)cl
         if rejections_csv.exists():
             try:
                 rej_df = pd.read_csv(rejections_csv)            # read CSV of rejects

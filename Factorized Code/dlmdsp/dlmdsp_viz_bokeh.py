@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # dlmdsp_viz_bokeh.py                                                             # module: interactive Bokeh
 # ──────────────────────────────────────────────────────────────────────────────
-"""Interactive Bokeh tabs with tolerance bands, accepted points, and residuals.
+"""An interactive Bokeh tabs with tolerance bands, accepted points, and residuals created in a your default browser.
 
 For each training/ideal pair, I show:
 - training and ideal curves
